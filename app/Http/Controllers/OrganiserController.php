@@ -53,6 +53,13 @@ class OrganiserController extends MyBaseController
         $organiser->facebook = $request->get('facebook');
         $organiser->twitter = $request->get('twitter');
         $organiser->confirmation_key = str_random(15);
+        $organiser->taxname = $request->get('taxname');
+        $organiser->taxvalue = $request->get('taxvalue');
+        $organiser->taxid = $request->get('taxid');
+
+        $organiser->taxname = $request->get('taxname');
+        $organiser->taxvalue = round($request->get('taxvalue'),2);
+        $organiser->taxid = $request->get('taxid');
 
         if ($request->hasFile('organiser_logo')) {
             $organiser->setLogo($request->file('organiser_logo'));
@@ -60,11 +67,11 @@ class OrganiserController extends MyBaseController
 
         $organiser->save();
 
-        session()->flash('message', 'Successfully Created Organiser.');
+        session()->flash('message', trans("Controllers.successfully_created_organiser"));
 
         return response()->json([
             'status'      => 'success',
-            'message'     => 'Refreshing..',
+            'message'     => trans("Controllers.refreshing"),
             'redirectUrl' => route('showOrganiserEvents', [
                 'organiser_id' => $organiser->id,
                 'first_run'    => 1
