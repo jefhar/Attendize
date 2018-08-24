@@ -5,9 +5,9 @@
         </h1>
     </div>
 
-    @if($event->start_date->isPast())
+    @if($event->end_date->isPast())
         <div class="alert alert-boring">
-            @lang("Public_ViewEvent.event_already", ["started" => $event->end_date->isFuture() ? trans("Public_ViewEvent.event_already_started"):trans("Public_ViewEvent.event_already_ended")])
+            @lang("Public_ViewEvent.event_already", ['started' => trans('Public_ViewEvent.event_already_ended')])
         </div>
     @else
 
@@ -42,7 +42,7 @@
                                                     $is_free_event = false;
                                                     ?>
                                                     <span title='{{money($ticket->price, $event->currency)}} @lang("Public_ViewEvent.ticket_price") + {{money($ticket->total_booking_fee, $event->currency)}} @lang("Public_ViewEvent.booking_fees")'>{{money($ticket->total_price, $event->currency)}} </span>
-                                                    <span class="tax-amount text-muted text-smaller">{{ ($event->organiser->taxname && $event->organiser->taxvalue) ? '(+'.money(($ticket->total_price*($event->organiser->taxvalue)/100), $event->currency).' '.$event->organiser->taxname.')' : '' }}</span>
+                                                    <span class="tax-amount text-muted text-smaller">{{ ($event->organiser->tax_name && $event->organiser->tax_value) ? '(+'.money(($ticket->total_price*($event->organiser->tax_value)/100), $event->currency).' '.$event->organiser->tax_name.')' : '' }}</span>
                                                     <meta property="priceCurrency"
                                                           content="{{ $event->currency->code }}">
                                                     <meta property="price"

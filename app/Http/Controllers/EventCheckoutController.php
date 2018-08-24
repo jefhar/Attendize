@@ -15,6 +15,7 @@ use App\Models\PaymentGateway;
 use App\Models\QuestionAnswer;
 use App\Models\ReservedTickets;
 use App\Models\Ticket;
+use App\Services\Order as OrderService;
 use Carbon\Carbon;
 use Cookie;
 use DB;
@@ -199,7 +200,7 @@ class EventCheckoutController extends Controller
         /*
          * The 'ticket_order_{event_id}' session stores everything we need to complete the transaction.
          */
-        session()->set('ticket_order_' . $event->id, [
+        session()->put('ticket_order_' . $event->id, [
             'validation_rules'        => $validation_rules,
             'validation_messages'     => $validation_messages,
             'event_id'                => $event->id,
@@ -257,11 +258,17 @@ class EventCheckoutController extends Controller
 
         $secondsToExpire = Carbon::now()->diffInSeconds($order_session['expires']);
 
+        $event = Event::findorFail($order_session['event_id']);
+
+        $orderService = new OrderService($order_session['order_total'], $order_session['total_booking_fee'], $event);
+        $orderService->calculateFinalCosts();
+
         $data = $order_session + [
-                'event'           => Event::findorFail($order_session['event_id']),
+                'event'           => $event,
                 'secondsToExpire' => $secondsToExpire,
                 'is_embedded'     => $this->is_embedded,
-            ];
+                'orderService'    => $orderService
+                ];
 
         if ($this->is_embedded) {
             return view('Public.ViewEvent.Embedded.EventPageCheckout', $data);
@@ -346,16 +353,14 @@ class EventCheckoutController extends Controller
                         ]);
                 }
 
-                // Calculating grand total including tax
-                $grand_total = $ticket_order['order_total'] + $ticket_order['organiser_booking_fee'];
-                $tax_amt = ($grand_total * $event->organiser->taxvalue) / 100;
-                $grand_total = $tax_amt + $grand_total;
-
+                $orderService = new OrderService($ticket_order['order_total'], $ticket_order['total_booking_fee'], $event);
+                $orderService->calculateFinalCosts();
+              
                 $transaction_data += [
-                        'amount'      => $grand_total,
+                        'amount'      => $orderService->getGrandTotal(),
                         'currency'    => $event->currency->code,
                         'description' => 'Order for customer: ' . $request->get('order_email'),
-                    ];
+                ];
 
                 switch ($ticket_order['payment_gateway']->id) {
                     case config('attendize.payment_gateway_dummy'):
@@ -367,7 +372,6 @@ class EventCheckoutController extends Controller
                         ];
                         break;
                     case config('attendize.payment_gateway_paypal'):
-                    case config('attendize.payment_gateway_coinbase'):
 
                         $transaction_data += [
                             'cancelUrl' => route('showEventCheckoutPaymentReturn', [
@@ -389,20 +393,6 @@ class EventCheckoutController extends Controller
                             'token'         => $token,
                             'receipt_email' => $request->get('order_email'),
                         ];
-                        break;
-                    case config('attendize.payment_gateway_migs'):
-                        $transaction_data += [
-                            'transactionId' => $event_id . date('YmdHis'),       // TODO: Where to generate transaction id?
-                            'returnUrl' => route('showEventCheckoutPaymentReturn', [
-                                'event_id'              => $event_id,
-                                'is_payment_successful' => 1
-                            ]),
-
-                        ];
-
-                        // Order description in MIGS is only 34 characters long; so we need a short description
-                        $transaction_data['description'] = "Ticket sales " . $transaction_data['transactionId'];
-
                         break;
                     default:
                         Log::error('No payment gateway configured.');
@@ -562,10 +552,10 @@ class EventCheckoutController extends Controller
             $order->is_payment_received = isset($request_data['pay_offline']) ? 0 : 1;
 
             // Calculating grand total including tax
-            $grand_total = $ticket_order['order_total'] + $ticket_order['organiser_booking_fee'];
-            $tax_amt = ($grand_total * $event->organiser->taxvalue) / 100;
+            $orderService = new OrderService($ticket_order['order_total'], $ticket_order['total_booking_fee'], $event);
+            $orderService->calculateFinalCosts();
 
-            $order->taxamt = $tax_amt;
+            $order->taxamt = $orderService->getTaxAmount();
             $order->save();
 
             /*
@@ -681,18 +671,6 @@ class EventCheckoutController extends Controller
                 }
             }
 
-            /*
-             * Kill the session
-             */
-            session()->forget('ticket_order_' . $event->id);
-
-            /*
-             * Queue up some tasks - Emails to be sent, PDFs etc.
-             */
-            Log::info('Firing the event');
-            event(new OrderCompletedEvent($order));
-
-
         } catch (Exception $e) {
 
             Log::error($e);
@@ -704,8 +682,15 @@ class EventCheckoutController extends Controller
             ]);
 
         }
-
+        //save the order to the database
         DB::commit();
+        //forget the order in the session
+        session()->forget('ticket_order_' . $event->id);
+
+        // Queue up some tasks - Emails to be sent, PDFs etc.
+        Log::info('Firing the event');
+        event(new OrderCompletedEvent($order));
+
 
         if ($return_json) {
             return response()->json([
@@ -740,11 +725,15 @@ class EventCheckoutController extends Controller
             abort(404);
         }
 
+        $orderService = new OrderService($order->amount, $order->organiser_booking_fee, $order->event);
+        $orderService->calculateFinalCosts();
+
         $data = [
-            'order'       => $order,
-            'event'       => $order->event,
-            'tickets'     => $order->event->tickets,
-            'is_embedded' => $this->is_embedded,
+            'order'        => $order,
+            'orderService' => $orderService,
+            'event'        => $order->event,
+            'tickets'      => $order->event->tickets,
+            'is_embedded'  => $this->is_embedded,
         ];
 
         if ($this->is_embedded) {

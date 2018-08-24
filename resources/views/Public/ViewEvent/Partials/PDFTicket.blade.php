@@ -92,13 +92,13 @@
 								@php
 	                            	// Calculating grand total including tax
 					                $grand_total = $attendee->ticket->total_price;
-					                $tax_amt = ($grand_total * $event->organiser->taxvalue) / 100;
+					                $tax_amt = ($grand_total * $event->organiser->tax_value) / 100;
 					                $grand_total = $tax_amt + $grand_total;
 	                            @endphp
-	                            {{money($grand_total, $order->event->currency)}} (inc. {{money($attendee->ticket->total_booking_fee, $order->event->currency)}} @lang("Public_ViewEvent.inc_fees") (inc. {{money($tax_amt, $order->event->currency)}} {{$event->organiser->taxname}})
-	                            <br><br>{{$event->organiser->taxname}} ID: {{ $event->organiser->taxid }}
+	                            {{money($grand_total, $order->event->currency)}} (inc. {{money($attendee->ticket->total_booking_fee, $order->event->currency)}} @lang("Public_ViewEvent.inc_fees") (inc. {{money($tax_amt, $order->event->currency)}} {{$event->organiser->tax_name}})
+	                            <br><br>{{$event->organiser->tax_name}} ID: {{ $event->organiser->tax_id }}
                             </div>
-
+			</div>
                         <div class="barcode">
                             {!! DNS2D::getBarcodeSVG($attendee->private_reference_number, "QRCODE", 6, 6) !!}
                         </div>
@@ -107,9 +107,6 @@
                             {!! DNS1D::getBarcodeSVG($attendee->private_reference_number, "C39+", 1, 50) !!}
                         </div>
                         @endif
-                        <div class="foot">
-                            @lang("Ticket.footer")
-                        </div>
                     </div>
                 @endif
             @endforeach
